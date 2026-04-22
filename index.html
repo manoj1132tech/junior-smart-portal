@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KRR Portal - GitHub Hosted</title>
+    <title>KRR Portal - GitHub Hosted with CSV</title>
     <style>
         :root { --red: #d32f2f; --gold: #b8860b; --blue: #1a237e; --bg: #f0f2f5; }
         body { font-family: 'Times New Roman', serif; background: var(--bg); margin: 0; padding-bottom: 50px; }
@@ -74,6 +74,7 @@
 
     <div id="admin" class="section">
         <h3>Admin Management</h3>
+        
         <div class="step-box" style="background:#e8f5e9; border-left-color: #2e7d32;">
             <label><b>🚀 Rank Wise Bulk Entry (Auto-Fill)</b></label>
             <select id="rankClass" onchange="loadRankTable()" style="margin-top:10px;">
@@ -90,6 +91,13 @@
                 </table>
                 <button class="btn-action" style="background:var(--blue);" onclick="saveBulkRanks()">Process & Update All Students</button>
             </div>
+        </div>
+
+        <div class="step-box" style="background:#fff3e0; border-left-color: #ef6c00;">
+            <label><b>📂 Sync Master Data (CSV Upload)</b></label>
+            <p style="font-size: 12px; color: #666;">Note: Uploading CSV will overwrite existing data in Google Sheet.</p>
+            <input type="file" id="csvFile" accept=".csv">
+            <button class="btn-action" style="background:var(--red);" onclick="uploadCSV()">Upload & Sync Master Data</button>
         </div>
     </div>
 </div>
@@ -112,29 +120,45 @@
         btn.classList.add('active');
     }
 
-    // Google Sheet se data laane ke liye
     async function syncData() {
         try {
             const response = await fetch(WEB_APP_URL);
             MASTER = await response.json();
             console.log("Data Synced");
-        } catch (e) { alert("Error connecting to Google Sheets!"); }
+        } catch (e) { console.log("Sync Error"); }
     }
     syncData();
 
-    // Data Sheet mein bhejne ke liye
-    async function postData(payload) {
+    async function postToSheet(data) {
         document.getElementById('loadingStatus').style.display = 'block';
         try {
             const res = await fetch(WEB_APP_URL, {
                 method: "POST",
-                body: JSON.stringify({action: "updateSheetData", payload: payload})
+                body: JSON.stringify(data)
             });
             const result = await res.text();
             alert(result);
             syncData();
-        } catch (e) { alert("Update Failed!"); }
+        } catch (e) { alert("Action Failed!"); }
         document.getElementById('loadingStatus').style.display = 'none';
+    }
+
+    // --- CSV UPLOAD LOGIC ---
+    function uploadCSV() {
+        const fileInput = document.getElementById('csvFile');
+        const file = fileInput.files[0];
+        if (!file) return alert("Pehle CSV file select karein!");
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const content = e.target.result;
+            const rows = content.split("\n").map(row => row.split(",").map(cell => cell.trim()));
+            // Filtering out empty rows
+            const cleanData = rows.filter(r => r.length > 1 && r[0] !== "");
+            
+            postToSheet({action: "updateMaster", data: cleanData});
+        };
+        reader.readAsText(file);
     }
 
     // --- MANUAL ENTRY LOGIC ---
@@ -174,7 +198,7 @@
             {col: cols[2]+1, val: document.getElementById('m3').value},
             {col: cols[3]+1, val: document.getElementById('m4').value}
         ];
-        postData([{rowIndex: i, updates: updates}]);
+        postToSheet({action: "updateSheetData", payload: [{rowIndex: i, updates: updates}]});
     }
 
     // --- RANK LOGIC ---
@@ -215,13 +239,12 @@
                 Object.keys(colMap).forEach(sub => {
                     const c = colMap[sub];
                     const mark = getMarksByRank(rank);
-                    // Fixed FA marks to 26 for consistency
                     updates.push({col: c[0]+1, val: 26}, {col: c[1]+1, val: mark}, {col: c[2]+1, val: 26}, {col: c[3]+1, val: mark});
                 });
                 payload.push({rowIndex: inp.dataset.row, updates: updates});
             }
         });
-        if(payload.length) postData(payload);
+        if(payload.length) postToSheet({action: "updateSheetData", payload: payload});
     }
 </script>
 </body>
