@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KRR Portal - GitHub Hosted with CSV</title>
+    <title>KRR Portal - Admin Print Version</title>
     <style>
         :root { --red: #d32f2f; --gold: #b8860b; --blue: #1a237e; --bg: #f0f2f5; }
         body { font-family: 'Times New Roman', serif; background: var(--bg); margin: 0; padding-bottom: 50px; }
@@ -39,7 +39,7 @@
         <h3>Manual Marks Entry</h3>
         <div class="step-box">
             <label>1. Select Class</label>
-            <select id="tClass" onchange="filterStudents()">
+            <select id="tClass" onchange="filterStudents('teacher')">
                 <option value="">-- Choose Class --</option>
                 <option value="I">Class I</option><option value="II">Class II</option>
                 <option value="III">Class III</option><option value="IV">Class IV</option>
@@ -48,7 +48,7 @@
             </select>
         </div>
         <div id="studentStep" class="step-box" style="display:none;">
-            <label>2. Select Student</label><select id="tStudent" onchange="loadStudent()"></select>
+            <label>2. Select Student</label><select id="tStudent" onchange="loadStudentInfo()"></select>
             <div id="studentInfoBox" style="margin-top:10px; font-size:14px; color:#555;"></div>
         </div>
         <div id="subjectStep" class="step-box" style="display:none;">
@@ -62,10 +62,10 @@
             </select>
         </div>
         <div id="marksArea" style="display:none;">
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; background:#fff; padding:15px; border-radius:8px; border:1px solid #ddd;">
-                <div>FA I+II (30): <input type="number" id="m1"></div>
+            <div id="marksGrid" style="display:grid; grid-template-columns:1fr 1fr; gap:10px; background:#fff; padding:15px; border-radius:8px; border:1px solid #ddd;">
+                <div id="f1_box">FA I+II (30): <input type="number" id="m1"></div>
                 <div>Half Yearly (70): <input type="number" id="m2"></div>
-                <div>FA III+IV (30): <input type="number" id="m3"></div>
+                <div id="f2_box">FA III+IV (30): <input type="number" id="m3"></div>
                 <div>Annual (70): <input type="number" id="m4"></div>
             </div>
             <button class="btn-action" onclick="saveManual()">Save Manual Entry</button>
@@ -75,8 +75,23 @@
     <div id="admin" class="section">
         <h3>Admin Management</h3>
         
+        <div class="step-box" style="background:#e3f2fd; border-left-color: #1976d2;">
+            <label><b>🖨️ Print Marksheet</b></label>
+            <div style="display: flex; gap: 10px; margin-top: 10px;">
+                <select id="pClass" onchange="filterStudents('admin')">
+                    <option value="">Select Class</option>
+                    <option value="I">Class I</option><option value="II">Class II</option>
+                    <option value="III">Class III</option><option value="IV">Class IV</option>
+                    <option value="V">Class V</option><option value="VI">Class VI</option>
+                    <option value="VII">Class VII</option><option value="VIII">Class VIII</option>
+                </select>
+                <select id="pStudent"><option value="">Select Student</option></select>
+            </div>
+            <button class="btn-action" style="background:#1976d2;" onclick="generatePrint()">Generate & Print Marksheet</button>
+        </div>
+
         <div class="step-box" style="background:#e8f5e9; border-left-color: #2e7d32;">
-            <label><b>🚀 Rank Wise Bulk Entry (Auto-Fill)</b></label>
+            <label><b>🚀 Rank Wise Bulk Entry</b></label>
             <select id="rankClass" onchange="loadRankTable()" style="margin-top:10px;">
                 <option value="">Select Class to Rank</option>
                 <option value="I">Class I</option><option value="II">Class II</option>
@@ -95,7 +110,6 @@
 
         <div class="step-box" style="background:#fff3e0; border-left-color: #ef6c00;">
             <label><b>📂 Sync Master Data (CSV Upload)</b></label>
-            <p style="font-size: 12px; color: #666;">Note: Uploading CSV will overwrite existing data in Google Sheet.</p>
             <input type="file" id="csvFile" accept=".csv">
             <button class="btn-action" style="background:var(--red);" onclick="uploadCSV()">Upload & Sync Master Data</button>
         </div>
@@ -103,10 +117,8 @@
 </div>
 
 <script>
-    // --- YAHAN APNA GOOGLE WEB APP URL PASTE KAREIN ---
     const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyqfsNtVGZU4bE-Q_5q4bHX3rKVSlduKvcq22_5C0GJwrkROxrfrs2EXhE9YlA-tzpN/exec"; 
     const ADMIN_PASS = "KRR@2026";
-    
     let MASTER = [];
     const colMap = { 
         hindi:[11,12,13,14], english:[7,8,9,10], math:[15,16,17,18], science:[19,20,21,22], 
@@ -121,56 +133,29 @@
     }
 
     async function syncData() {
-        try {
-            const response = await fetch(WEB_APP_URL);
-            MASTER = await response.json();
-            console.log("Data Synced");
-        } catch (e) { console.log("Sync Error"); }
+        const response = await fetch(WEB_APP_URL);
+        MASTER = await response.json();
     }
     syncData();
 
     async function postToSheet(data) {
         document.getElementById('loadingStatus').style.display = 'block';
-        try {
-            const res = await fetch(WEB_APP_URL, {
-                method: "POST",
-                body: JSON.stringify(data)
-            });
-            const result = await res.text();
-            alert(result);
-            syncData();
-        } catch (e) { alert("Action Failed!"); }
+        const res = await fetch(WEB_APP_URL, { method: "POST", body: JSON.stringify(data) });
+        const result = await res.text();
+        alert(result);
+        syncData();
         document.getElementById('loadingStatus').style.display = 'none';
     }
 
-    // --- CSV UPLOAD LOGIC ---
-    function uploadCSV() {
-        const fileInput = document.getElementById('csvFile');
-        const file = fileInput.files[0];
-        if (!file) return alert("Pehle CSV file select karein!");
-
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            const content = e.target.result;
-            const rows = content.split("\n").map(row => row.split(",").map(cell => cell.trim()));
-            // Filtering out empty rows
-            const cleanData = rows.filter(r => r.length > 1 && r[0] !== "");
-            
-            postToSheet({action: "updateMaster", data: cleanData});
-        };
-        reader.readAsText(file);
-    }
-
-    // --- MANUAL ENTRY LOGIC ---
-    function filterStudents() {
-        const cls = document.getElementById('tClass').value;
-        const sel = document.getElementById('tStudent');
+    function filterStudents(type) {
+        const cls = (type === 'teacher') ? document.getElementById('tClass').value : document.getElementById('pClass').value;
+        const sel = (type === 'teacher') ? document.getElementById('tStudent') : document.getElementById('pStudent');
         sel.innerHTML = '<option value="">-- Choose Student --</option>';
         MASTER.forEach((r, i) => { if(i > 0 && r[3] == cls) sel.add(new Option(r[0], i)); });
-        document.getElementById('studentStep').style.display = 'block';
+        if(type === 'teacher') document.getElementById('studentStep').style.display = 'block';
     }
 
-    function loadStudent() {
+    function loadStudentInfo() {
         const i = document.getElementById('tStudent').value;
         const s = MASTER[i];
         document.getElementById('studentInfoBox').innerHTML = `<b>Roll:</b> ${s[4]} | <b>Father:</b> Mr. ${s[2]}`;
@@ -181,9 +166,18 @@
         const sub = document.getElementById('tSubject').value;
         const i = document.getElementById('tStudent').value;
         const cols = colMap[sub];
-        document.getElementById('m1').value = MASTER[i][cols[0]] || 0;
+        
+        if(sub === 'physical') {
+            document.getElementById('f1_box').style.visibility = 'hidden';
+            document.getElementById('f2_box').style.visibility = 'hidden';
+            document.getElementById('m1').value = 0; document.getElementById('m3').value = 0;
+        } else {
+            document.getElementById('f1_box').style.visibility = 'visible';
+            document.getElementById('f2_box').style.visibility = 'visible';
+            document.getElementById('m1').value = MASTER[i][cols[0]] || 0;
+            document.getElementById('m3').value = MASTER[i][cols[2]] || 0;
+        }
         document.getElementById('m2').value = MASTER[i][cols[1]] || 0;
-        document.getElementById('m3').value = MASTER[i][cols[2]] || 0;
         document.getElementById('m4').value = MASTER[i][cols[3]] || 0;
         document.getElementById('marksArea').style.display='block';
     }
@@ -201,7 +195,14 @@
         postToSheet({action: "updateSheetData", payload: [{rowIndex: i, updates: updates}]});
     }
 
-    // --- RANK LOGIC ---
+    function loadRankTable() {
+        const cls = document.getElementById('rankClass').value;
+        const body = document.getElementById('rankBody');
+        body.innerHTML = '';
+        MASTER.forEach((r, i) => { if(i > 0 && r[3] == cls) body.innerHTML += `<tr><td>${r[4]}</td><td>${r[0]}</td><td><input type="number" class="rank-input" data-row="${i}"></td></tr>`; });
+        document.getElementById('rankTableArea').style.display = 'block';
+    }
+
     function getMarksByRank(rank) {
         let min, max; rank = parseInt(rank);
         if (rank === 1) { min = 65; max = 70; }
@@ -217,18 +218,6 @@
         return Math.floor(Math.random() * (max - min + 1)) + min;
     }
 
-    function loadRankTable() {
-        const cls = document.getElementById('rankClass').value;
-        const body = document.getElementById('rankBody');
-        body.innerHTML = '';
-        MASTER.forEach((r, i) => {
-            if(i > 0 && r[3] == cls) {
-                body.innerHTML += `<tr><td>${r[4]}</td><td>${r[0]}</td><td><input type="number" class="rank-input" data-row="${i}"></td></tr>`;
-            }
-        });
-        document.getElementById('rankTableArea').style.display = 'block';
-    }
-
     function saveBulkRanks() {
         const inputs = document.querySelectorAll('.rank-input');
         let payload = [];
@@ -239,12 +228,42 @@
                 Object.keys(colMap).forEach(sub => {
                     const c = colMap[sub];
                     const mark = getMarksByRank(rank);
-                    updates.push({col: c[0]+1, val: 26}, {col: c[1]+1, val: mark}, {col: c[2]+1, val: 26}, {col: c[3]+1, val: mark});
+                    const faVal = (sub === 'physical') ? 0 : 26;
+                    updates.push({col: c[0]+1, val: faVal}, {col: c[1]+1, val: mark}, {col: c[2]+1, val: faVal}, {col: c[3]+1, val: mark});
                 });
                 payload.push({rowIndex: inp.dataset.row, updates: updates});
             }
         });
         if(payload.length) postToSheet({action: "updateSheetData", payload: payload});
+    }
+
+    function generatePrint() {
+        const i = document.getElementById('pStudent').value;
+        if(!i) return alert("Pehle student select karein!");
+        const r = MASTER[i];
+        let rows = ''; let grandTotal = 0;
+        Object.keys(colMap).forEach(sub => {
+            const c = colMap[sub];
+            const f1 = parseInt(r[c[0]]) || 0; const hy = parseInt(r[c[1]]) || 0;
+            const f2 = parseInt(r[c[2]]) || 0; const an = parseInt(r[c[3]]) || 0;
+            const total = f1 + hy + f2 + an; grandTotal += (sub !== 'physical') ? total : 0;
+            rows += `<tr><td style="text-align:left">${sub.toUpperCase()}</td><td>${f1}</td><td>${hy}</td><td>${f2}</td><td>${an}</td><td>${total}</td></tr>`;
+        });
+        const printWindow = window.open('', '_blank');
+        printWindow.document.write(`<html><head><style>body {font-family:serif; padding:20px;} .m-page {border:10px double #d32f2f; padding:20px; text-align:center; background:#fffdf5;} table {width:100%; border-collapse:collapse; margin-top:20px;} th, td {border:1px solid black; padding:8px; text-align:center;} th {background:#d32f2f; color:white;}</style></head><body><div class="m-page"><h1>K.R.R. JUNIOR HIGH SCHOOL</h1><p>MANPUR BAHERI, BAREILLY</p><hr><div style="text-align:left"><p><b>Name:</b> ${r[0]} &nbsp;&nbsp; <b>Class:</b> ${r[3]} &nbsp;&nbsp; <b>Roll:</b> ${r[4]}</p><p><b>Father's Name:</b> Mr. ${r[2]}</p></div><table><thead><tr><th>SUBJECT</th><th>FA1</th><th>HY</th><th>FA2</th><th>AN</th><th>TOTAL</th></tr></thead><tbody>${rows}</tbody></table><h3 style="text-align:right">Grand Total: ${grandTotal} / 1400</h3><p style="text-align:right">Percentage: ${(grandTotal/14).toFixed(2)}%</p></div></body></html>`);
+        printWindow.document.close();
+        setTimeout(() => printWindow.print(), 500);
+    }
+
+    function uploadCSV() {
+        const file = document.getElementById('csvFile').files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const rows = e.target.result.split("\n").map(r => r.split(",").map(c => c.trim()));
+            postToSheet({action: "updateMaster", data: rows.filter(r => r.length > 1)});
+        };
+        reader.readAsText(file);
     }
 </script>
 </body>
