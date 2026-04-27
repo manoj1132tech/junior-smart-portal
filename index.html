@@ -280,16 +280,43 @@
         alert("Updated Successfully!"); sync();
     }
 
-    function uploadCSV() {
-        const file = document.getElementById('csvFile').files[0];
-        const reader = new FileReader();
-        reader.onload = async (e) => {
-            const rows = e.target.result.split("\n").map(r => r.split(","));
-            await fetch(API, { method:"POST", body: JSON.stringify({action:"updateMaster", data: rows}) });
-            alert("Master Data Updated!"); sync();
-        };
-        reader.readAsText(file);
-    }
+   async function uploadCSV() {
+    const file = document.getElementById('csvFile').files[0];
+    if (!file) { alert("Pehle file select karein!"); return; }
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+        const text = e.target.result;
+        // 1. Rows ko split karein aur khaali rows ko filter karein
+        const rows = text.split(/\r?\n/).filter(row => row.trim() !== "");
+        
+        // 2. Har row ko columns mein split karein (Comma separated)
+        const csvData = rows.map(r => r.split(",").map(cell => cell.trim()));
+
+        if (csvData.length === 0) { alert("File khaali hai!"); return; }
+
+        try {
+            const response = await fetch(API, { 
+                method: "POST", 
+                body: JSON.stringify({
+                    action: "updateMaster", 
+                    data: csvData 
+                }) 
+            });
+            
+            if (response.ok) {
+                alert("Master Data Successfully Synced with Sheet!");
+                sync(); // Naya data load karne ke liye
+            } else {
+                alert("Server error! Backend check karein.");
+            }
+        } catch (err) {
+            console.error(err);
+            alert("Network error! URL check karein.");
+        }
+    };
+    reader.readAsText(file);
+}
 
     function formatDOB(val) {
         if(!val) return "---";
