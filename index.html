@@ -152,7 +152,6 @@
     }
     sync();
 
-    // Fill Percentage Dropdown
     const percDropdown = document.getElementById('aPerc');
     for(let i=100; i>=50; i--) {
         percDropdown.add(new Option(i + '%', i));
@@ -185,12 +184,13 @@
         const i = document.getElementById('tStudent').value;
         if(!i) return;
         const s = MASTER[i];
-        document.getElementById('studentInfoBox').innerHTML = `<b>Roll:</b> ${s[4]} | <b>Father:</b> Mr. ${s[2]}`;
+        // Leading zero logic for Roll No
+        const rollFormatted = String(s[4]).padStart(2, '0');
+        document.getElementById('studentInfoBox').innerHTML = `<b>Roll:</b> ${rollFormatted} | <b>Father:</b> Mr. ${s[2]}`;
         document.getElementById('studentInfoBox').style.display='block';
         document.getElementById('subjectStep').style.display='block';
     }
 
-    // --- AUTO DISTRIBUTION LOGIC ---
     async function autoDistributeMarks() {
         const i = document.getElementById('aStudent').value;
         const targetPerc = document.getElementById('aPerc').value;
@@ -198,41 +198,29 @@
 
         if(!confirm(`Kya aap marks update karna chahte hain?`)) return;
 
-        // Total subjects for marks = 7 (excluding physical which is grade-based)
-        // Total possible marks = 7 subjects * 200 = 1400
         const totalNeeded = Math.round((targetPerc / 100) * 1400);
-        let currentTotal = 0;
         const updates = [];
-
-        // Har subject ke liye marks calculate karein (Hindi to Drawing)
         const subjects = ['hindi', 'english', 'math', 'science', 'social', 'computer', 'drawing'];
         
         subjects.forEach((sub, idx) => {
             const cols = colMap[sub];
-            // Average per subject needed
             let subTarget = totalNeeded / 7;
-            // Add some randomness (-10 to +10) so marks are not same
             let randomDiff = Math.floor(Math.random() * 21) - 10;
             let subTotal = Math.min(200, Math.max(66, Math.round(subTarget + randomDiff)));
 
-            // Now split subTotal into 4 parts (FA1+2, HY, FA3+4, AN)
-            // Ratio approx: 15% : 35% : 15% : 35%
             let m1 = Math.round(subTotal * 0.15);
             let m2 = Math.round(subTotal * 0.35);
             let m3 = Math.round(subTotal * 0.15);
             let m4 = subTotal - (m1 + m2 + m3);
 
-            // Bounds check
             if(m1 > 30) m1 = 30; if(m3 > 30) m3 = 30;
             if(m2 > 70) m2 = 70; if(m4 > 70) m4 = 70;
 
             updates.push({ cols: cols, vals: [m1, m2, m3, m4] });
         });
 
-        // Physical Education (Fixing to A grade marks)
         updates.push({ cols: colMap['physical'], vals: [0, 60, 0, 62] });
 
-        // API Calls (Sequence)
         for(let update of updates) {
             await fetch(API, { 
                 method:"POST", 
@@ -287,33 +275,17 @@
     const reader = new FileReader();
     reader.onload = async (e) => {
         const text = e.target.result;
-        // 1. Rows ko split karein aur khaali rows ko filter karein
         const rows = text.split(/\r?\n/).filter(row => row.trim() !== "");
-        
-        // 2. Har row ko columns mein split karein (Comma separated)
         const csvData = rows.map(r => r.split(",").map(cell => cell.trim()));
-
         if (csvData.length === 0) { alert("File khaali hai!"); return; }
-
         try {
             const response = await fetch(API, { 
                 method: "POST", 
-                body: JSON.stringify({
-                    action: "updateMaster", 
-                    data: csvData 
-                }) 
+                body: JSON.stringify({ action: "updateMaster", data: csvData }) 
             });
-            
-            if (response.ok) {
-                alert("Master Data Successfully Synced with Sheet!");
-                sync(); // Naya data load karne ke liye
-            } else {
-                alert("Server error! Backend check karein.");
-            }
-        } catch (err) {
-            console.error(err);
-            alert("Network error! URL check karein.");
-        }
+            if (response.ok) { alert("Master Data Successfully Synced with Sheet!"); sync(); } 
+            else { alert("Server error! Backend check karein."); }
+        } catch (err) { alert("Network error! URL check karein."); }
     };
     reader.readAsText(file);
 }
@@ -360,6 +332,10 @@
                 });
                 const perc = (gt / 14).toFixed(2);
                 const isPass = perc >= 33;
+                
+                // Leading zero logic for Roll No in Marksheet
+                const rollFormatted = String(r[4]).padStart(2, '0');
+
                 html += `
                 <div class="marksheet-page">
                     <div class="m-header">
@@ -375,7 +351,7 @@
                     </div>
                     <div class="m-banner">PROGRESS REPORT</div>
                     <table class="m-info-table">
-                        <tr><td width="60%"><span class="m-label">Student Name :</span> <span class="m-val-red">${r[0]}</span></td><td><span class="m-label">Roll No :</span> <span class="m-val-red">${r[4]}</span></td></tr>
+                        <tr><td width="60%"><span class="m-label">Student Name :</span> <span class="m-val-red">${r[0]}</span></td><td><span class="m-label">Roll No :</span> <span class="m-val-red">${rollFormatted}</span></td></tr>
                         <tr><td><span class="m-label">Father Name :</span> <span class="m-val-red">Mr. ${r[2]}</span></td><td><span class="m-label">Class :</span> <span class="m-val-red">${r[3]}</span></td></tr>
                         <tr><td><span class="m-label">Mother Name :</span> <span class="m-val-red">Mrs. ${r[1]}</span></td><td><span class="m-label">Date of Birth :</span> <span class="m-val-red">${formatDOB(r[5])}</span></td></tr>
                         <tr><td colspan="2"><span class="m-label">PEN NO :</span> <span class="m-val-red">${r[6] || '---'}</span></td></tr>
